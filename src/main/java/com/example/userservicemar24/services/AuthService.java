@@ -1,12 +1,16 @@
 package com.example.userservicemar24.services;
 
 import com.example.userservicemar24.dtos.UserDto;
+import com.example.userservicemar24.models.Role;
 import com.example.userservicemar24.models.Session;
 import com.example.userservicemar24.models.SessionStatus;
 import com.example.userservicemar24.models.User;
 import com.example.userservicemar24.repository.SessionRepository;
 import com.example.userservicemar24.repository.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.MacAlgorithm;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.boot.web.server.Ssl;
@@ -19,11 +23,9 @@ import org.springframework.util.MultiValueMapAdapter;
 import org.springframework.http.HttpHeaders;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static java.net.http.HttpHeaders.*;
 import static org.springframework.http.HttpHeaders.SET_COOKIE;
@@ -33,6 +35,8 @@ public class AuthService {
     private UserRepository userRepository;
     private BCryptPasswordEncoder bCryptPasswordEncoder;
     private SessionRepository sessionRepository;
+    private static final String SECRET_KEY = "your_secret_key_here"; // Replace with your actual secret key
+    SecretKey keyValue;
     public AuthService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder, SessionRepository sessionRepository) {
         this.userRepository = userRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
@@ -59,7 +63,12 @@ public class AuthService {
         String token = RandomStringUtils.randomAlphanumeric(30);
 
         MacAlgorithm algorithm = Jwts.SIG.HS256;
+        //SecretKey key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
+
         SecretKey key = algorithm.key().build();
+        keyValue=key;
+
+
         Map<String, Object> claims = new HashMap<>();
         claims.put("email", user.getEmail());
         claims.put("roles", user.getRoles());
@@ -104,6 +113,18 @@ public class AuthService {
         }
         Session session = sessionOptional.get();
         if(!session.getSessionStatus().equals(SessionStatus.ACTIVE)){
+            return SessionStatus.ENDED;
+        }
+        //SecretKey key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
+        Jws<Claims> claimsJws = Jwts.parser().build().parseSignedClaims(token);
+        /*Jws<Claims> claimsJws = Jwts.parser()
+               .setSigningKey(keyValue) // Replace with your actual signing key
+               .build().parseSignedClaims(token);*/
+        String email = claimsJws.getPayload().get("email", String.class);
+        List<Role> roles = claimsJws.getPayload().get("roles", List.class);
+        Date createdAt = claimsJws.getPayload().get("createdAt", Date.class);
+
+        if(createdAt.before(new Date())){
             return SessionStatus.ENDED;
         }
         return SessionStatus.ACTIVE;
